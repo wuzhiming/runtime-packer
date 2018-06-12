@@ -1,45 +1,80 @@
 // main.js
 var path = require('path');
 var fs = require('fs');
-var archiver = require('archiver');
+var JSZip = require('./lib/jszip.min.js');
+var jsZip = new JSZip();
+
+walk = function (dir, callback, complete) {
+    var dirList = [dir];
+    do {
+        var dirItem = dirList.pop();
+        var list = fs.readdirSync(dirItem);
+        list.forEach(function (file) {
+            file = dirItem + '/' + file;
+            var stat = fs.statSync(file);
+            if (stat && stat.isDirectory()) {
+                dirList.push(file);
+            } else {
+                callback(file)
+            }
+        });
+        if (dirList.length <= 0) {
+            complete();
+        }
+    } while (dirList.length > 0);
+}
 
 function onBeforeBuildFinish(options, callback) {
-    Editor.log('Building cpk' + options.platform + ' to ' + options.dest); // 你可以在控制台输出点什么
+    Editor.log('Building cpk ' + options.platform + ' to ' + options.dest);
 
     var mainName = 'main.js';
-    var resName = 'res/';
-    var srcName = 'src/';
-    var targetName = 'runtime-tests.2.cpk';
-
-    var dirTarget = path.join(options.dest, targetName);
+    var resName = 'res';
+    var srcName = 'src';
 
     var fileMain = path.join(options.dest, mainName);
     var dirRes = path.join(options.dest, resName);
     var dirSrc = path.join(options.dest, srcName);
 
-    // create a file to stream archive data to.
-    var output = fs.createWriteStream(dirTarget);
-    var archive = archiver('zip', {
-        zlib: { level: 9 } // Sets the compression level.
+    //判断 res 与 src 是否遍历完成
+    var isResComplete;
+    var isSrcComplete;
+
+    //生成压缩文件
+    var zip = function () {
+        var targetName = 'runtime-tests.2.cpk';
+        var dirTarget = path.join(options.dest, targetName);
+
+        jsZip.generateNodeStream({ type: "nodebuffer" })
+            .pipe(fs.createWriteStream(dirTarget))
+            .on('finish', function () {
+                let outTips = Editor.T('EXPORT_ASSET.export_tips', { outPath: dirTarget });
+                Editor.log(outTips);
+                callback()
+            });
+    }
+
+    //添加main.js 文件
+    jsZip.file(mainName, fs.readFileSync(fileMain));
+    //添加 res 目录中的文件
+    walk(dirRes, function (file) {
+        var name = file.slice(options.dest.length, file.length);
+        jsZip.file(name, fs.readFileSync(file));
+    }, function () {
+        isResComplete = true;
+        if (isSrcComplete) {
+            zip();
+        }
     });
-    // listen for all archive data to be written
-    // 'close' event is fired only when a file descriptor is involved
-    output.on('close', function () {
-        callback();
+    //添加 src 目录中的文件
+    walk(dirSrc, function (file) {
+        var name = file.slice(options.dest.length, file.length);
+        jsZip.file(name, fs.readFileSync(file));
+    }, function () {
+        isSrcComplete = true;
+        if (isResComplete) {
+            zip();
+        }
     });
-    // good practice to catch this error explicitly
-    archive.on('error', function (err) {
-        Editor.log("build cpk error occurred");
-        Editor.log(err);
-        callback();
-    });
-    // pipe archive data to the file
-    archive.pipe(output);
-    // append a file from stream
-    archive.append(fs.createReadStream(fileMain), { name: mainName });
-    archive.directory(dirRes, resName);
-    archive.directory(dirSrc, srcName);
-    archive.finalize();
 }
 
 module.exports = {
