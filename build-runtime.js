@@ -4,7 +4,7 @@ var fs = require('fs');
 var JSZip = require('./lib/jszip.min.js');
 var jsZip = new JSZip();
 
-walk = function (dir, callback, complete) {
+function walk (dir, callback, complete) {
     var dirList = [dir];
     do {
         var dirItem = dirList.pop();
@@ -24,7 +24,7 @@ walk = function (dir, callback, complete) {
     } while (dirList.length > 0);
 }
 
-function onBeforeBuildFinish(options, callback) {
+function onBeforeBuildFinish(event, options) {
     Editor.log('Building cpk ' + options.platform + ' to ' + options.dest);
 
     var mainName = 'main.js';
@@ -49,9 +49,9 @@ function onBeforeBuildFinish(options, callback) {
             .on('finish', function () {
                 let outTips = Editor.T('EXPORT_ASSET.export_tips', { outPath: dirTarget });
                 Editor.log(outTips);
-                callback()
+                event.reply()
             });
-    }
+    };
 
     //添加main.js 文件
     jsZip.file(mainName, fs.readFileSync(fileMain));
@@ -78,11 +78,9 @@ function onBeforeBuildFinish(options, callback) {
 }
 
 module.exports = {
-    load() {
-        Editor.Builder.on('before-change-files', onBeforeBuildFinish);
+    name: 'Runtime',
+    extends: Editor.isWin32 ? 'win32' : 'mac',
+    messages: {
+        'before-change-files': onBeforeBuildFinish,
     },
-
-    unload() {
-        Editor.Builder.removeListener('before-change-files', onBeforeBuildFinish);
-    }
 };
