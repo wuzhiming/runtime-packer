@@ -4,7 +4,7 @@ var fs = require('fs');
 var JSZip = require('./lib/jszip.min.js');
 var jsZip = new JSZip();
 
-function walk (dir, callback, complete) {
+function walk(dir, callback, complete) {
     var dirList = [dir];
     do {
         var dirItem = dirList.pop();
@@ -15,7 +15,7 @@ function walk (dir, callback, complete) {
             if (stat && stat.isDirectory()) {
                 dirList.push(file);
             } else {
-                callback(file)
+                callback(file);
             }
         });
         if (dirList.length <= 0) {
@@ -81,6 +81,6 @@ module.exports = {
     name: 'Runtime',
     extends: Editor.isWin32 ? 'win32' : 'mac',
     messages: {
-        'before-change-files': onBeforeBuildFinish,
+        'build-finished': onBeforeBuildFinish,
     },
 };
