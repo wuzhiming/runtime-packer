@@ -35,13 +35,17 @@ function onBeforeBuildFinish(event, options) {
     var dirRes = path.join(options.dest, resName);
     var dirSrc = path.join(options.dest, srcName);
 
+    var polyFilePath = path.join(__dirname, 'jsb_polyfill.js');
+    var srcPolyFilePath = path.join(dirSrc, 'jsb_polyfill.js');
+    fs.writeFileSync(srcPolyFilePath, fs.readFileSync(polyFilePath));
+
     //判断 res 与 src 是否遍历完成
     var isResComplete;
     var isSrcComplete;
 
     //生成压缩文件
     var zip = function () {
-        var targetName = 'runtime-tests.2.cpk';
+        var targetName = 'runtime-tests.6.cpk';
         var dirTarget = path.join(options.dest, targetName);
 
         jsZip.generateNodeStream({ type: "nodebuffer" })
