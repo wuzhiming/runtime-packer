@@ -4,18 +4,27 @@ var fs = require('fs');
 var JSZip = require('./lib/jszip.min.js');
 var jsZip = new JSZip();
 
-function walk(dir, callback, complete) {
+var rootPath;
+
+function walk(dir, complete) {
     var dirList = [dir];
+    var parentPathList = [rootPath];
+    var parentZip = [jsZip];
     do {
         var dirItem = dirList.pop();
+        var dirParentPath = parentPathList.pop();
+        var dirZip = parentZip.pop();
+        var folder = dirZip.folder(dirItem.slice(dirParentPath.length + 1, dirItem.length));
         var list = fs.readdirSync(dirItem);
         list.forEach(function (file) {
-            file = dirItem + '/' + file;
+            file = path.join(dirItem, file);
             var stat = fs.statSync(file);
             if (stat && stat.isDirectory()) {
                 dirList.push(file);
+                parentPathList.push(dirItem);
+                parentZip.push(folder);
             } else {
-                callback(file);
+                folder.file(file.slice(dirItem.length + 1, file.length), fs.readFileSync(file));
             }
         });
         if (dirList.length <= 0) {
@@ -26,12 +35,15 @@ function walk(dir, callback, complete) {
 
 function onBeforeBuildFinish(event, options) {
     Editor.log('Building cpk ' + options.platform + ' to ' + options.dest);
+    rootPath = options.dest;
 
     var mainName = 'main.js';
+    var cfgName = 'game.config.json';
     var resName = 'res';
     var srcName = 'src';
 
     var fileMain = path.join(options.dest, mainName);
+    var fileCfg = path.join(__dirname, cfgName);
     var dirRes = path.join(options.dest, resName);
     var dirSrc = path.join(options.dest, srcName);
 
@@ -45,7 +57,7 @@ function onBeforeBuildFinish(event, options) {
 
     //生成压缩文件
     var zip = function () {
-        var targetName = 'runtime-tests.6.cpk';
+        var targetName = options.title + '.6.cpk';
         var dirTarget = path.join(options.dest, targetName);
 
         jsZip.generateNodeStream({ type: "nodebuffer" })
@@ -57,23 +69,19 @@ function onBeforeBuildFinish(event, options) {
             });
     };
 
-    //添加main.js 文件
+    //添加 main.js 文件
     jsZip.file(mainName, fs.readFileSync(fileMain));
+    //添加 game.config.json 文件
+    jsZip.file(cfgName, fs.readFileSync(fileCfg));
     //添加 res 目录中的文件
-    walk(dirRes, function (file) {
-        var name = file.slice(options.dest.length, file.length);
-        jsZip.file(name, fs.readFileSync(file));
-    }, function () {
+    walk(dirRes, function () {
         isResComplete = true;
         if (isSrcComplete) {
             zip();
         }
     });
     //添加 src 目录中的文件
-    walk(dirSrc, function (file) {
-        var name = file.slice(options.dest.length, file.length);
-        jsZip.file(name, fs.readFileSync(file));
-    }, function () {
+    walk(dirSrc, function () {
         isSrcComplete = true;
         if (isResComplete) {
             zip();
