@@ -81,7 +81,7 @@ function onBeforeBuildFinish(event, options) {
         var targetName = options.title + '.6.cpk';
         var dirTarget = path.join(options.dest, targetName);
 
-        jsZip.generateNodeStream({ type: "nodebuffer" })
+        jsZip.generateNodeStream({ type: "nodebuffer", base64: false, compression: 'DEFLATE' })
             .pipe(fs.createWriteStream(dirTarget))
             .on('finish', function () {
                 let outTips = Editor.T('EXPORT_ASSET.export_tips', { outPath: dirTarget });
