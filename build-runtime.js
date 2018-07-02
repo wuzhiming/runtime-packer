@@ -47,9 +47,9 @@ function onBeforeBuildFinish(event, options) {
     var dirRes = path.join(options.dest, resName);
     var dirSrc = path.join(options.dest, srcName);
 
-    var polyFilePath = path.join(__dirname, 'jsb_polyfill.js');
-    var srcPolyFilePath = path.join(dirSrc, 'jsb_polyfill.js');
-    fs.writeFileSync(srcPolyFilePath, fs.readFileSync(polyFilePath));
+    // var polyFilePath = path.join(__dirname, 'jsb_polyfill.js');
+    // var srcPolyFilePath = path.join(dirSrc, 'jsb_polyfill.js');
+    // fs.writeFileSync(srcPolyFilePath, fs.readFileSync(polyFilePath));
 
     //判断 res 与 src 是否遍历完成
     var isResComplete;
