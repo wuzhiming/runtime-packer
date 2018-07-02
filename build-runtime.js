@@ -33,17 +33,38 @@ function walk(dir, complete) {
     } while (dirList.length > 0);
 }
 
+function writeConfigFile(deviceOrientation, showStatusBar, runtimeVersion, path) {
+    var jsonObj = {
+        "deviceOrientation": deviceOrientation,
+        "showStatusBar": showStatusBar,
+        "runtimeVersion": runtimeVersion,
+    };
+    var jsonStr = JSON.stringify(jsonObj);
+    fs.writeFileSync(path, jsonStr);
+}
+
 function onBeforeBuildFinish(event, options) {
+    Editor.log('Checking config file ' + options.dest);
+    var cfgName = 'game.config.json';
+    var projectCgfFile = path.join(Editor.projectPath, cfgName);
+    if (!fs.existsSync(projectCgfFile)) {
+        Editor.error('Can not find config file in ' + Editor.projectPath);
+        writeConfigFile("portrait", false, "1.0.0", projectCgfFile);
+        Editor.error('We have generated a config file for you in ' + Editor.projectPath + '/' + cfgName);
+        Editor.error('Please modify the file and build again');
+        Editor.error('Building cpk fail');
+        event.reply();
+        return;
+    }
+
     Editor.log('Building cpk ' + options.platform + ' to ' + options.dest);
     rootPath = options.dest;
 
     var mainName = 'main.js';
-    var cfgName = 'game.config.json';
     var resName = 'res';
     var srcName = 'src';
 
     var fileMain = path.join(options.dest, mainName);
-    var fileCfg = path.join(__dirname, cfgName);
     var dirRes = path.join(options.dest, resName);
     var dirSrc = path.join(options.dest, srcName);
 
@@ -72,7 +93,7 @@ function onBeforeBuildFinish(event, options) {
     //添加 main.js 文件
     jsZip.file(mainName, fs.readFileSync(fileMain));
     //添加 game.config.json 文件
-    jsZip.file(cfgName, fs.readFileSync(fileCfg));
+    jsZip.file(cfgName, fs.readFileSync(projectCgfFile));
     //添加 res 目录中的文件
     walk(dirRes, function () {
         isResComplete = true;
