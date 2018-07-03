@@ -132,7 +132,14 @@ module.exports = {
     name: 'OPPO 快游戏',
     platform: 'runtime',
     extends: Editor.isWin32 ? 'win32' : 'mac',
+    buttons: [
+        Editor.Builder.DefaultButtons.Build,
+        { label: Editor.T('BUILDER.play'), message: 'play' },
+    ],
     messages: {
         'build-finished': onBeforeBuildFinish,
+        'play' (event, options) {
+            Editor.Ipc.sendToMain('oppo-runtime-devtools:open', options);
+        },
     },
 };
