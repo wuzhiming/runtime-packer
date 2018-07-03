@@ -111,7 +111,8 @@ function onBeforeBuildFinish(event, options) {
 }
 
 module.exports = {
-    name: 'Runtime',
+    name: 'OPPO 快游戏',
+    platform: 'runtime',
     extends: Editor.isWin32 ? 'win32' : 'mac',
     messages: {
         'build-finished': onBeforeBuildFinish,
