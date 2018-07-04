@@ -6,7 +6,7 @@ var jsZip = new JSZip();
 
 var rootPath;
 
-function walk(dir, complete) {
+function walk(dir, noZipFileList, complete) {
     var dirList = [dir];
     var parentPathList = [rootPath];
     var parentZip = [jsZip];
@@ -17,14 +17,22 @@ function walk(dir, complete) {
         var folder = dirZip.folder(dirItem.slice(dirParentPath.length + 1, dirItem.length));
         var list = fs.readdirSync(dirItem);
         list.forEach(function (file) {
-            file = path.join(dirItem, file);
-            var stat = fs.statSync(file);
-            if (stat && stat.isDirectory()) {
-                dirList.push(file);
-                parentPathList.push(dirItem);
-                parentZip.push(folder);
-            } else {
-                folder.file(file.slice(dirItem.length + 1, file.length), fs.readFileSync(file));
+            var shouldZip = true;
+            noZipFileList.forEach(function (noZipFile) {
+                if (file === noZipFile) {
+                    shouldZip = false;
+                }
+            });
+            if (shouldZip) {
+                file = path.join(dirItem, file);
+                var stat = fs.statSync(file);
+                if (stat && stat.isDirectory()) {
+                    dirList.push(file);
+                    parentPathList.push(dirItem);
+                    parentZip.push(folder);
+                } else {
+                    folder.file(file.slice(dirItem.length + 1, file.length), fs.readFileSync(file));
+                }
             }
         });
         if (dirList.length <= 0) {
@@ -63,10 +71,12 @@ function onBeforeBuildFinish(event, options) {
     var mainName = 'main.js';
     var resName = 'res';
     var srcName = 'src';
+    var jsbAdapterName = 'jsb-adapter';
 
     var fileMain = path.join(options.dest, mainName);
     var dirRes = path.join(options.dest, resName);
     var dirSrc = path.join(options.dest, srcName);
+    var dirAdapter = path.join(options.dest, jsbAdapterName);
 
     // var polyFilePath = path.join(__dirname, 'jsb_polyfill.js');
     // var srcPolyFilePath = path.join(dirSrc, 'jsb_polyfill.js');
@@ -75,6 +85,7 @@ function onBeforeBuildFinish(event, options) {
     //判断 res 与 src 是否遍历完成
     var isResComplete;
     var isSrcComplete;
+    var isAdapterComplete;
 
     //生成压缩文件
     var zip = function () {
@@ -95,16 +106,23 @@ function onBeforeBuildFinish(event, options) {
     //添加 game.config.json 文件
     jsZip.file(cfgName, fs.readFileSync(projectCgfFile));
     //添加 res 目录中的文件
-    walk(dirRes, function () {
+    walk(dirRes, [], function () {
         isResComplete = true;
-        if (isSrcComplete) {
+        if (isSrcComplete || isAdapterComplete) {
             zip();
         }
     });
     //添加 src 目录中的文件
-    walk(dirSrc, function () {
+    walk(dirSrc, [], function () {
         isSrcComplete = true;
-        if (isResComplete) {
+        if (isResComplete || isAdapterComplete) {
+            zip();
+        }
+    });
+    //添加 jsb-adapter 目录中的文件
+    walk(dirAdapter, ["jsb-builtin.js"], function () {
+        isAdapterComplete = true;
+        if (isResComplete || isResComplete) {
             zip();
         }
     });
