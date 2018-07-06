@@ -5,5 +5,12 @@
     "author": "Cocos Creator",
     "main-menu": {},
     "license": "ISC",
-    "simple-build-target": "build-runtime.js"
+    "simple-build-target": "build-runtime.js",
+    "panel": {
+        "main": "MessagePanel.js",
+        "type": "dockable",
+        "title": "Simple Panel",
+        "width": 400,
+        "height": 300
+    }
 }

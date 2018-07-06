@@ -56,11 +56,13 @@ function onBeforeBuildFinish(event, options) {
     var cfgName = 'game.config.json';
     var projectCgfFile = path.join(Editor.projectPath, cfgName);
     if (!fs.existsSync(projectCgfFile)) {
-        Editor.error('Can not find config file in ' + Editor.projectPath);
+        var message = 'Can not find config file in ' + '\"' + Editor.projectPath + '\"';
+        message = message + "\n\n" + 'We have generated a config file for you in ' + '\"' + Editor.projectPath + '/' + cfgName + '\"';
+        message = message + "\n\n" + 'Please modify the file and build again';
+        message = message + "\n\n" + 'Building cpk fail';
+        Editor.Panel.open('cpk-publish', message);
         writeConfigFile("portrait", false, "1.0.0", projectCgfFile);
-        Editor.error('We have generated a config file for you in ' + Editor.projectPath + '/' + cfgName);
-        Editor.error('Please modify the file and build again');
-        Editor.error('Building cpk fail');
+        Editor.failed('Building cpk fail');
         event.reply();
         return;
     }
@@ -108,21 +110,21 @@ function onBeforeBuildFinish(event, options) {
     //添加 res 目录中的文件
     walk(dirRes, [], function () {
         isResComplete = true;
-        if (isSrcComplete || isAdapterComplete) {
+        if (isSrcComplete && isAdapterComplete) {
             zip();
         }
     });
     //添加 src 目录中的文件
     walk(dirSrc, [], function () {
         isSrcComplete = true;
-        if (isResComplete || isAdapterComplete) {
+        if (isResComplete && isAdapterComplete) {
             zip();
         }
     });
     //添加 jsb-adapter 目录中的文件
     walk(dirAdapter, ["jsb-builtin.js"], function () {
         isAdapterComplete = true;
-        if (isResComplete || isResComplete) {
+        if (isResComplete && isSrcComplete) {
             zip();
         }
     });
