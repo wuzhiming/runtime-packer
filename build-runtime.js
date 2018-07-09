@@ -91,7 +91,7 @@ function onBeforeBuildFinish(event, options) {
 
     //生成压缩文件
     var zip = function () {
-        var targetName = options.title + '.6.cpk';
+        var targetName = options.title + '.cpk';
         var dirTarget = path.join(options.dest, targetName);
 
         jsZip.generateNodeStream({ type: "nodebuffer", base64: false, compression: 'DEFLATE' })
@@ -140,7 +140,7 @@ module.exports = {
     ],
     messages: {
         'build-finished': onBeforeBuildFinish,
-        'play' (event, options) {
+        'play'(event, options) {
             Editor.Ipc.sendToMain('oppo-runtime-devtools:open', options);
         },
     },
