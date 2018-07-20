@@ -3,10 +3,32 @@ var path = require('path');
 var fs = require('fs');
 var JSZip = require('./lib/jszip.min.js');
 var jsZip = new JSZip();
+var Hashes = require('./lib/hashes.min.js');
 
 var rootPath;
 
-function walk(dir, noZipFileList, complete) {
+function walkDir(dir, fileCb, dirCb, complete) {
+    var dirList = [dir];
+    do {
+        var dirItem = dirList.pop();
+        var list = fs.readdirSync(dirItem);
+        list.forEach(function (file) {
+            var fileFullPath = path.join(dirItem, file);
+            var stat = fs.statSync(fileFullPath);
+            if (stat && stat.isDirectory()) {
+                dirList.push(fileFullPath);
+                dirCb(dirItem, file);
+            } else {
+                fileCb(dirItem, file);
+            }
+        });
+        if (dirList.length <= 0) {
+            complete();
+        }
+    } while (dirList.length > 0);
+}
+
+function zipDir(dir, noZipFileList, complete) {
     var dirList = [dir];
     var parentPathList = [rootPath];
     var parentZip = [jsZip];
@@ -41,11 +63,48 @@ function walk(dir, noZipFileList, complete) {
     } while (dirList.length > 0);
 }
 
-function writeConfigFile(deviceOrientation, showStatusBar, runtimeVersion, path) {
+function zipSubpackage(assetsPath, targetPath, title, complete) {
+    var subpackages = [];
+    var count = 0;
+    var walkComplete = false;
+    walkDir(assetsPath, function (parentPath, fileName) {
+        var fileExt = path.extname(fileName);
+        var name = path.basename(fileName, fileExt);
+        var jsFile = path.join(parentPath, fileName);
+
+        var jsZipSubpackage = new JSZip();
+        var dirZip = jsZipSubpackage.folder(name);
+        dirZip.file("main.js", fs.readFileSync(jsFile));
+
+        var crc32 = Hashes.CRC32(name + "/");
+        var zipTarget = path.join(targetPath, title + crc32 + ".cpk");
+        jsZipSubpackage.generateNodeStream({ type: "nodebuffer", base64: false, compression: 'DEFLATE' })
+            .pipe(fs.createWriteStream(zipTarget))
+            .on('finish', function () {
+                count -= 1;
+                if (walkComplete === true && count <= 0) {
+                    complete(subpackages);
+                }
+            });
+        count += 1;
+        // 添加配置文件数组
+        var subObj = {
+            "name": name,
+            "root": name + "/"
+        }
+        subpackages.push(subObj);
+    }, function (parentPath, dirName) { }, function () {
+        //complete
+        walkComplete = true;
+    });
+}
+
+function writeConfigFile(deviceOrientation, showStatusBar, runtimeVersion, subpackageArr, path) {
     var jsonObj = {
         "deviceOrientation": deviceOrientation,
         "showStatusBar": showStatusBar,
         "runtimeVersion": runtimeVersion,
+        "subpackages": subpackageArr,
     };
     var jsonStr = JSON.stringify(jsonObj);
     fs.writeFileSync(path, jsonStr);
@@ -61,7 +120,7 @@ function onBeforeBuildFinish(event, options) {
         message = message + "\n\n" + 'Please modify the file and build again';
         message = message + "\n\n" + 'Building cpk fail';
         Editor.Panel.open('cpk-publish', message);
-        writeConfigFile("portrait", false, "1.0.0", projectCgfFile);
+        writeConfigFile("portrait", false, "1.0.0", [], projectCgfFile);
         Editor.failed('Building cpk fail');
         event.reply();
         return;
@@ -79,6 +138,7 @@ function onBeforeBuildFinish(event, options) {
     var dirRes = path.join(options.dest, resName);
     var dirSrc = path.join(options.dest, srcName);
     var dirAdapter = path.join(options.dest, jsbAdapterName);
+    var dirSubpackage = path.join(dirSrc, "assets");
 
     // var polyFilePath = path.join(__dirname, 'jsb_polyfill.js');
     // var srcPolyFilePath = path.join(dirSrc, 'jsb_polyfill.js');
@@ -88,6 +148,30 @@ function onBeforeBuildFinish(event, options) {
     var isResComplete;
     var isSrcComplete;
     var isAdapterComplete;
+
+    //生成分包
+    var dirTargetSubpackage = path.join(options.dest, "subpackages");
+    var generateSubpackage = function () {
+        if (!fs.existsSync(dirSubpackage)) {
+            event.reply();
+            return;
+        }
+        if (!fs.existsSync(dirTargetSubpackage)) {
+            fs.mkdirSync(dirTargetSubpackage);
+        }
+        // 生成分包 cpk
+        zipSubpackage(dirSubpackage, dirTargetSubpackage, options.title, function (subpackageArr) {
+            // 读取 config 文件
+            var configStr = fs.readFileSync(projectCgfFile);
+            var configJSON = JSON.parse(configStr);
+            writeConfigFile(configJSON.deviceOrientation,
+                configJSON.showStatusBar,
+                configJSON.runtimeVersion,
+                subpackageArr,
+                projectCgfFile);
+            event.reply();
+        });
+    }
 
     //生成压缩文件
     var zip = function () {
@@ -99,7 +183,7 @@ function onBeforeBuildFinish(event, options) {
             .on('finish', function () {
                 let outTips = Editor.T('EXPORT_ASSET.export_tips', { outPath: dirTarget });
                 Editor.log(outTips);
-                event.reply()
+                generateSubpackage();
             });
     };
 
@@ -108,21 +192,21 @@ function onBeforeBuildFinish(event, options) {
     //添加 game.config.json 文件
     jsZip.file(cfgName, fs.readFileSync(projectCgfFile));
     //添加 res 目录中的文件
-    walk(dirRes, [], function () {
+    zipDir(dirRes, [], function () {
         isResComplete = true;
         if (isSrcComplete && isAdapterComplete) {
             zip();
         }
     });
     //添加 src 目录中的文件
-    walk(dirSrc, [], function () {
+    zipDir(dirSrc, ["assets"], function () {
         isSrcComplete = true;
         if (isResComplete && isAdapterComplete) {
             zip();
         }
     });
     //添加 jsb-adapter 目录中的文件
-    walk(dirAdapter, ["jsb-builtin.js"], function () {
+    zipDir(dirAdapter, ["jsb-builtin.js"], function () {
         isAdapterComplete = true;
         if (isResComplete && isSrcComplete) {
             zip();
