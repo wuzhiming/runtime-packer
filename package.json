@@ -12,5 +12,12 @@
         "title": "Simple Panel",
         "width": 400,
         "height": 300
+    },
+    "profiles": {
+        "project":{
+            "deviceOrientation": "portrait",
+            "showStatusBar": false,
+            "runtimeVersion": "1.0.0"
+        }
     }
 }

@@ -6,6 +6,8 @@ var jsZip = new JSZip();
 
 var rootPath;
 
+let RUNTIME_CONFIG;
+Editor.Profile.load('profile://project/cpk-publish.json');
 function walk(dir, noZipFileList, complete) {
     var dirList = [dir];
     var parentPathList = [rootPath];
@@ -130,6 +132,18 @@ function onBeforeBuildFinish(event, options) {
     });
 }
 
+//先读取runtime相应的配置信息
+function loadRuntimeSettings(event,options) {
+    Editor.Profile.load('profile://project/cpk-publish.json', (err, ret) => {
+        if (err) {
+            //错误操作
+            return;
+        }
+        RUNTIME_CONFIG = ret.data;
+        onBeforeBuildFinish(event,options);
+    });
+}
+
 module.exports = {
     name: 'OPPO 快游戏',
     platform: 'runtime',
@@ -139,9 +153,10 @@ module.exports = {
         { label: Editor.T('BUILDER.play'), message: 'play' },
     ],
     messages: {
-        'build-finished': onBeforeBuildFinish,
+        'build-finished': loadRuntimeSettings,
         'play'(event, options) {
             Editor.Ipc.sendToMain('oppo-runtime-devtools:open', options);
         },
     },
+    builderUI: Editor.url('packages://cpk-publish/build-runtime-ui.js')
 };
