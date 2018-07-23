@@ -267,5 +267,5 @@ module.exports = {
             Editor.Ipc.sendToMain('oppo-runtime-devtools:open', options);
         },
     },
-    builderUI: Editor.url('packages://cpk-publish/build-runtime-ui.js')
+    settings: Editor.url('packages://cpk-publish/build-runtime-ui.js')
 };
