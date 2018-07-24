@@ -23,12 +23,6 @@ exports.template = `
 
 exports.name = 'runtime';
 
-exports.props = {
-    'data': null,
-    'project': null,
-    'anysdk': null,
-};
-
 exports.data = function () {
     return {
         runtimeSetting: {
