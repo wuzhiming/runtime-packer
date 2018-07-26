@@ -125,7 +125,10 @@ function zipSubpackage(subpackageDirs, targetPath, title, complete) {
     });
 }
 
-function writeConfigFile(deviceOrientation, showStatusBar, runtimeVersion, subpackageArr, path) {
+function writeConfigFile(subpackageArr, path) {
+    var deviceOrientation = RUNTIME_CONFIG.deviceOrientation;
+    var runtimeVersion = RUNTIME_CONFIG.runtimeVersion;
+    var showStatusBar = RUNTIME_CONFIG.showStatusBar;
     var jsonObj = {
         "deviceOrientation": deviceOrientation,
         "showStatusBar": showStatusBar,
@@ -141,15 +144,7 @@ function onBeforeBuildFinish(event, options) {
     var cfgName = 'game.config.json';
     var projectCgfFile = path.join(Editor.projectPath, cfgName);
     if (!fs.existsSync(projectCgfFile)) {
-        var message = 'Can not find config file in ' + '\"' + Editor.projectPath + '\"';
-        message = message + "\n\n" + 'We have generated a config file for you in ' + '\"' + Editor.projectPath + '/' + cfgName + '\"';
-        message = message + "\n\n" + 'Please modify the file and build again';
-        message = message + "\n\n" + 'Building cpk fail';
-        Editor.Panel.open('cpk-publish', message);
-        writeConfigFile("portrait", false, "1.0.0", [], projectCgfFile);
-        Editor.failed('Building cpk fail');
-        event.reply();
-        return;
+        writeConfigFile([], projectCgfFile);
     }
 
     Editor.log('Building cpk ' + options.platform + ' to ' + options.dest);
@@ -187,13 +182,7 @@ function onBeforeBuildFinish(event, options) {
             // 生成分包 cpk
             zipSubpackage(subpackages, dirTargetSubpackage, options.title, function (subpackageArr) {
                 // 读取 config 文件
-                var configStr = fs.readFileSync(projectCgfFile);
-                var configJSON = JSON.parse(configStr);
-                writeConfigFile(configJSON.deviceOrientation,
-                    configJSON.showStatusBar,
-                    configJSON.runtimeVersion,
-                    subpackageArr,
-                    projectCgfFile);
+                writeConfigFile(subpackageArr, projectCgfFile);
                 event.reply();
             });
         });
@@ -243,14 +232,16 @@ function onBeforeBuildFinish(event, options) {
 
 //先读取runtime相应的配置信息
 function loadRuntimeSettings(event,options) {
-    Editor.Profile.load('profile://project/cpk-publish.json', (err, ret) => {
-        if (err) {
-            //错误操作
-            return;
-        }
-        RUNTIME_CONFIG = ret.data;
-        onBeforeBuildFinish(event,options);
-    });
+    var value = Editor.Profile.load('profile://project/cpk-publish.json');
+    RUNTIME_CONFIG = value.data;
+    var deviceOrientation = RUNTIME_CONFIG.deviceOrientation;
+    var runtimeVersion = RUNTIME_CONFIG.runtimeVersion;
+    var showStatusBar = RUNTIME_CONFIG.showStatusBar;
+    if (deviceOrientation === undefined || runtimeVersion === undefined || showStatusBar === undefined) {
+        event.reply(new Error("Config error!"));
+        return;
+    }
+    onBeforeBuildFinish(event,options);
 }
 
 module.exports = {
