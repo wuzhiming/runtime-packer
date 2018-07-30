@@ -131,7 +131,7 @@ function onBeforeBuildFinish(event, options) {
 }
 
 module.exports = {
-    name: 'OPPO 快游戏',
+    name: 'VIVO 快游戏',
     platform: 'runtime',
     extends: Editor.isWin32 ? 'win32' : 'mac',
     buttons: [
@@ -140,8 +140,5 @@ module.exports = {
     ],
     messages: {
         'build-finished': onBeforeBuildFinish,
-        'play'(event, options) {
-            Editor.Ipc.sendToMain('oppo-runtime-devtools:open', options);
-        },
     },
 };
