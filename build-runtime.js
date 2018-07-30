@@ -31,7 +31,7 @@ function walk(dir, noZipFileList, complete) {
                     parentPathList.push(dirItem);
                     parentZip.push(folder);
                 } else {
-                    folder.file(file.slice(dirItem.length + 1, file.length), fs.readFileSync(file));
+                    addZipFile(folder, file.slice(dirItem.length + 1, file.length), file);
                 }
             }
         });
@@ -39,6 +39,27 @@ function walk(dir, noZipFileList, complete) {
             complete();
         }
     } while (dirList.length > 0);
+}
+
+var VIVOExternals = {};
+var rootPath = null;
+function addZipFile(zipObj, filePath, fullPath) {
+    var fileExt = path.extname(fullPath); 
+    if (fileExt === ".js") {
+        var relativeToZipPath = fullPath.slice(rootPath.length + 1, fullPath.length);
+        VIVOExternals[relativeToZipPath] = "commonjs " + relativeToZipPath;
+    }
+    zipObj.file(filePath, fs.readFileSync(fullPath));
+}
+
+function zipVIVOExternals(zipObj) {
+    // 生成 webpack.config.js 文件，并添加到 zip 中
+    var webpackName = "webpack.config.js";
+    var webpackSource = path.join(__dirname, webpackName);
+    var webpackFolder = zipObj.folder("config");
+    var webpackContent = fs.readFileSync(webpackSource, "utf8");
+    webpackContent = webpackContent.replace("EXTERNALS_PLACEHOLDER", JSON.stringify(VIVOExternals));
+    webpackFolder.file(webpackName, webpackContent);
 }
 
 function writeConfigFile(deviceOrientation, showStatusBar, runtimeVersion, path) {
@@ -53,6 +74,8 @@ function writeConfigFile(deviceOrientation, showStatusBar, runtimeVersion, path)
 
 function onBeforeBuildFinish(event, options) {
     Editor.log('Checking config file ' + options.dest);
+    // addZipFile 方法中获取文件相对于压缩包的路径
+    rootPath = options.dest;
     var cfgName = 'game.config.json';
     var projectCgfFile = path.join(Editor.projectPath, cfgName);
     if (!fs.existsSync(projectCgfFile)) {
@@ -94,6 +117,9 @@ function onBeforeBuildFinish(event, options) {
         var targetName = options.title + '.cpk';
         var dirTarget = path.join(options.dest, targetName);
 
+        // 添加 webpack.config.js 文件
+        zipVIVOExternals(jsZip);
+
         jsZip.generateNodeStream({ type: "nodebuffer", base64: false, compression: 'DEFLATE' })
             .pipe(fs.createWriteStream(dirTarget))
             .on('finish', function () {
@@ -104,9 +130,9 @@ function onBeforeBuildFinish(event, options) {
     };
 
     //添加 main.js 文件
-    jsZip.file(mainName, fs.readFileSync(fileMain));
+    addZipFile(jsZip, mainName, fileMain);
     //添加 game.config.json 文件
-    jsZip.file(cfgName, fs.readFileSync(projectCgfFile));
+    addZipFile(jsZip, cfgName, projectCgfFile);
     //添加 res 目录中的文件
     walk(dirRes, [], function () {
         isResComplete = true;
