@@ -42,12 +42,15 @@ function walk(dir, noZipFileList, complete) {
 }
 
 var VIVOExternals = {};
-var rootPath = null;
 function addZipFile(zipObj, filePath, fullPath) {
     var fileExt = path.extname(fullPath); 
     if (fileExt === ".js") {
         var relativeToZipPath = fullPath.slice(rootPath.length + 1, fullPath.length);
-        VIVOExternals[relativeToZipPath] = "commonjs " + relativeToZipPath;
+        // 去除 main.js 以及 jsb-adapter 下除了 index.js 的文件
+        if (relativeToZipPath !== "main.js" && 
+        (relativeToZipPath.indexOf("jsb-adapter") !== 0 || filePath === "index.js")) {
+            VIVOExternals[relativeToZipPath] = "commonjs " + relativeToZipPath;   
+        }
     }
     zipObj.file(filePath, fs.readFileSync(fullPath));
 }
@@ -75,7 +78,6 @@ function writeConfigFile(deviceOrientation, showStatusBar, runtimeVersion, path)
 function onBeforeBuildFinish(event, options) {
     Editor.log('Checking config file ' + options.dest);
     // addZipFile 方法中获取文件相对于压缩包的路径
-    rootPath = options.dest;
     var cfgName = 'game.config.json';
     var projectCgfFile = path.join(Editor.projectPath, cfgName);
     if (!fs.existsSync(projectCgfFile)) {
