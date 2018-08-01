@@ -1,10 +1,25 @@
+var WEBPACK_DIR_NAME = "config";
+var WEBPACK_NAME = "webpack.config.js";
+var SRC_DIR_NAME = "engine/src";
+var RES_DIR_NAME = "engine/res";
+var JSB_ADAPTER_DIR_NAME = "engine/jsb-adapter";
+var SIGN_DIR_NAME = "sign";
+var GAME_MANIFEST_DIR_NAME = "src";
+var MAIN_JS_NAME = "game.js";
+var GAME_CONFIG_JSONS_NAME = "manifest.json";
+
 // main.js
 var path = require('path');
 var fs = require('fs');
 var JSZip = require('./lib/jszip.min.js');
-var jsZip = new JSZip();
 
 var zipRootPath;
+
+// 获取资源文件
+function getResPath(name) {
+    var resPath = path.join(__dirname, "res");
+    return path.join(resPath, name);
+}
 
 // 遍历 dir
 function walkDir(dir, fileCb, dirCb, complete) {
@@ -51,6 +66,7 @@ function zipDir(zipObj, dir, destDirPath, noZipFileList, complete) {
 
 var VIVOExternals = {};
 function addZipFile(zipObj, filePath, fullPath) {
+    var shouldHandleRequire = false;
     var fileExt = path.extname(fullPath);
     if (fileExt === ".js") {
         var relativeToZipPath = fullPath.slice(zipRootPath.length + 1, fullPath.length);
@@ -58,16 +74,25 @@ function addZipFile(zipObj, filePath, fullPath) {
         if (relativeToZipPath !== "main.js" &&
             (relativeToZipPath.indexOf("jsb-adapter") !== 0 || filePath === "index.js")) {
             VIVOExternals[relativeToZipPath] = "commonjs " + relativeToZipPath;
+            shouldHandleRequire = true;
         }
     }
-    zipObj.file(filePath, fs.readFileSync(fullPath));
+    if (shouldHandleRequire) {
+        var handleString = fs.readFileSync(fullPath, "utf8");
+        /*
+        若需要处理 require 的问题, 则在这里处理
+        // 这里正则表达式处理 handleString, 处理完成后在添加到压缩列表中*/
+        zipObj.file(filePath, handleString);
+    } else {
+        zipObj.file(filePath, fs.readFileSync(fullPath));
+    }
 }
 
 function zipVIVOExternals(zipObj) {
     // 生成 webpack.config.js 文件，并添加到 zip 中
-    var webpackName = "webpack.config.js";
-    var webpackSource = path.join(__dirname, webpackName);
-    var webpackFolder = zipObj.folder("config");
+    var webpackName = WEBPACK_NAME;
+    var webpackSource = getResPath(webpackName);
+    var webpackFolder = zipObj.folder(WEBPACK_DIR_NAME);
     var webpackContent = fs.readFileSync(webpackSource, "utf8");
     webpackContent = webpackContent.replace("EXTERNALS_PLACEHOLDER", JSON.stringify(VIVOExternals));
     webpackFolder.file(webpackName, webpackContent);
@@ -81,6 +106,44 @@ function writeConfigFile(deviceOrientation, showStatusBar, runtimeVersion, path)
     };
     var jsonStr = JSON.stringify(jsonObj);
     fs.writeFileSync(path, jsonStr);
+}
+
+function handleSrc(zipObj) {
+    var srcFolder = zipObj.folder(GAME_MANIFEST_DIR_NAME);
+    //添加 main.js 文件
+    var mainName = 'main.js';
+    var fileMain = path.join(zipRootPath, mainName);
+    addZipFile(srcFolder, MAIN_JS_NAME, fileMain);
+    //添加 game.config.json 文件
+    var cfgName = 'game.config.json';
+    var projectCgfFile = path.join(Editor.projectPath, cfgName);
+    addZipFile(srcFolder, GAME_CONFIG_JSONS_NAME, projectCgfFile);
+}
+
+function handleSign(zipObj) {
+    var folder = zipObj.folder(SIGN_DIR_NAME);
+    // 使用 folder 向 sign 中添加文件
+    // addZipFile(folder...);
+}
+
+function handlePackage(zipObj) {
+    var fullPath = getResPath("package.json");
+    addZipFile(zipObj, "package.json", fullPath);
+}
+
+function handleDirs(zipObj, dirList, destList, noZipFileList, complete) {
+    var completeCount = 0;
+    for (let index = 0; index < dirList.length; index++) {
+        const fullDir = dirList[index];
+        const destDir = destList[index];
+        const noZipFiles = noZipFileList[index];
+        zipDir(zipObj, fullDir, destDir, noZipFiles, function () {
+            completeCount++;
+            if (completeCount === dirList.length) {
+                complete();
+            }
+        });
+    }
 }
 
 function onBeforeBuildFinish(event, options) {
@@ -103,63 +166,43 @@ function onBeforeBuildFinish(event, options) {
     Editor.log('Building cpk ' + options.platform + ' to ' + options.dest);
     zipRootPath = options.dest;
 
-    var mainName = 'main.js';
     var resName = 'res';
     var srcName = 'src';
     var jsbAdapterName = 'jsb-adapter';
 
-    var fileMain = path.join(options.dest, mainName);
     var dirRes = path.join(options.dest, resName);
     var dirSrc = path.join(options.dest, srcName);
     var dirAdapter = path.join(options.dest, jsbAdapterName);
 
-    //判断 res 与 src 是否遍历完成
-    var isResComplete;
-    var isSrcComplete;
-    var isAdapterComplete;
+    var jsZip = new JSZip();
 
-    //生成压缩文件
-    var zip = function () {
-        var targetName = options.title + '.cpk';
-        var dirTarget = path.join(options.dest, targetName);
+    // 处理 src 目录
+    handleSrc(jsZip);
+    // 处理 sign 目录
+    handleSign(jsZip);
+    // 处理 package.json
+    handlePackage(jsZip);
+    // 压缩 res src jsb-adapter 目录
+    handleDirs(jsZip,
+        [dirRes, dirSrc, dirAdapter],
+        [RES_DIR_NAME, SRC_DIR_NAME, JSB_ADAPTER_DIR_NAME],
+        [[], [], ["jsb-builtin.js"]],
+        function () {
+            // 生成压缩文件
+            var targetName = options.title + '.cpk';
+            var dirTarget = path.join(options.dest, targetName);
 
-        // 添加 webpack.config.js 文件
-        zipVIVOExternals(jsZip);
+            // 添加 webpack.config.js 文件
+            zipVIVOExternals(jsZip);
 
-        jsZip.generateNodeStream({ type: "nodebuffer", base64: false, compression: 'DEFLATE' })
-            .pipe(fs.createWriteStream(dirTarget))
-            .on('finish', function () {
-                let outTips = Editor.T('EXPORT_ASSET.export_tips', { outPath: dirTarget });
-                Editor.log(outTips);
-                event.reply()
-            });
-    };
-
-    //添加 main.js 文件
-    addZipFile(jsZip, mainName, fileMain);
-    //添加 game.config.json 文件
-    addZipFile(jsZip, cfgName, projectCgfFile);
-    //添加 res 目录中的文件
-    zipDir(jsZip, dirRes, "engine/res", [], function () {
-        isResComplete = true;
-        if (isSrcComplete && isAdapterComplete) {
-            zip();
-        }
-    });
-    //添加 src 目录中的文件
-    zipDir(jsZip, dirSrc, "engine/src", [], function () {
-        isSrcComplete = true;
-        if (isResComplete && isAdapterComplete) {
-            zip();
-        }
-    });
-    //添加 jsb-adapter 目录中的文件
-    zipDir(jsZip, dirAdapter, "engine/jsb-adapter", ["jsb-builtin.js"], function () {
-        isAdapterComplete = true;
-        if (isResComplete && isSrcComplete) {
-            zip();
-        }
-    });
+            jsZip.generateNodeStream({ type: "nodebuffer", base64: false, compression: 'DEFLATE' })
+                .pipe(fs.createWriteStream(dirTarget))
+                .on('finish', function () {
+                    let outTips = Editor.T('EXPORT_ASSET.export_tips', { outPath: dirTarget });
+                    Editor.log(outTips);
+                    event.reply()
+                });
+        });
 }
 
 module.exports = {
