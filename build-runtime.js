@@ -1,8 +1,8 @@
 var WEBPACK_DIR_NAME = "config";
 var WEBPACK_NAME = "webpack.config.js";
-var SRC_DIR_NAME = "engine/src";
-var RES_DIR_NAME = "engine/res";
-var JSB_ADAPTER_DIR_NAME = "engine/jsb-adapter";
+var SRC_DIR_NAME = "engine";
+var RES_DIR_NAME = "engine";
+var JSB_ADAPTER_DIR_NAME = "engine";
 var SIGN_DIR_NAME = "sign";
 var GAME_MANIFEST_DIR_NAME = "src";
 var MAIN_JS_NAME = "game.js";
@@ -22,16 +22,20 @@ function getResPath(name) {
 }
 
 // 遍历 dir
-function walkDir(dir, fileCb, dirCb, complete) {
+function walkDir(dir, fileCb, dirCb, nexDir, complete) {
     var dirList = [dir];
+    var dirParentList = [path.dirname(dir)];
     do {
         var dirItem = dirList.pop();
+        var dirParent = dirParentList.pop();
+        nexDir(dirParent, dirItem);
         var list = fs.readdirSync(dirItem);
         list.forEach(function (file) {
             var fileFullPath = path.join(dirItem, file);
             var stat = fs.statSync(fileFullPath);
             if (stat && stat.isDirectory()) {
                 dirList.push(fileFullPath);
+                dirParentList.push(dirItem);
                 dirCb(dirItem, file);
             } else {
                 fileCb(dirItem, file);
@@ -44,6 +48,10 @@ function walkDir(dir, fileCb, dirCb, complete) {
 }
 
 function zipDir(zipObj, dir, destDirPath, noZipFileList, complete) {
+    zipObj = zipObj.folder(destDirPath);
+    var folderParentList = [zipObj];
+    var folderCurrent;
+
     walkDir(dir, function (parentDir, fileName) {
         var shouldZip = true;
         noZipFileList.forEach(function (noZipFile) {
@@ -51,15 +59,15 @@ function zipDir(zipObj, dir, destDirPath, noZipFileList, complete) {
                 shouldZip = false;
             }
         });
-        //获取父目录的相对路径
-        var relativeToZipParentDir = parentDir.slice(zipRootPath.length + 1, parentDir.length);
-        var finalDestDir = path.join(destDirPath, relativeToZipParentDir);
-        var folder = zipObj.folder(finalDestDir);
         if (shouldZip) {
             var fullPath = path.join(parentDir, fileName);
-            addZipFile(folder, fileName, fullPath);
+            addZipFile(folderCurrent, fileName, fullPath);
         }
-    }, function (parentDir, dirName) { }, function () {
+    }, function (parentDir, dirName) {
+        folderParentList.push(folderCurrent);
+    }, function (parentDir, currentDir) {
+        folderCurrent = folderParentList.pop().folder(currentDir.slice(parentDir.length + 1, currentDir.length));
+    }, function () {
         complete();
     });
 }
