@@ -61,7 +61,7 @@ function zipDir(zipObj, dir, destDirPath, noZipFileList, complete) {
         });
         if (shouldZip) {
             var fullPath = path.join(parentDir, fileName);
-            addZipFile(folderCurrent, fileName, fullPath);
+            addZipFile(folderCurrent, destDirPath, fileName, fullPath);
         }
     }, function (parentDir, dirName) {
         folderParentList.push(folderCurrent);
@@ -73,14 +73,15 @@ function zipDir(zipObj, dir, destDirPath, noZipFileList, complete) {
 }
 
 var VIVOExternals = {};
-function addZipFile(zipObj, filePath, fullPath) {
+function addZipFile(zipObj, destDirPath, filePath, fullPath) {
     var shouldHandleRequire = false;
     var fileExt = path.extname(fullPath);
     if (fileExt === ".js") {
         var relativeToZipPath = fullPath.slice(zipRootPath.length + 1, fullPath.length);
+        relativeToZipPath = path.join(destDirPath, relativeToZipPath);
         // 去除 main.js 以及 jsb-adapter 下除了 index.js 的文件
-        if (relativeToZipPath !== "main.js" &&
-            (relativeToZipPath.indexOf("jsb-adapter") !== 0 || filePath === "index.js")) {
+        if (relativeToZipPath !== path.join(GAME_MANIFEST_DIR_NAME, "main.js") &&
+            (relativeToZipPath.indexOf(path.join(JSB_ADAPTER_DIR_NAME, "jsb-adapter")) !== 0 || filePath === "index.js")) {
             VIVOExternals[relativeToZipPath] = "commonjs " + relativeToZipPath;
             shouldHandleRequire = true;
         }
@@ -121,11 +122,11 @@ function handleSrc(zipObj) {
     //添加 main.js 文件
     var mainName = 'main.js';
     var fileMain = path.join(zipRootPath, mainName);
-    addZipFile(srcFolder, MAIN_JS_NAME, fileMain);
+    addZipFile(srcFolder, GAME_MANIFEST_DIR_NAME, MAIN_JS_NAME, fileMain);
     //添加 game.config.json 文件
     var cfgName = 'game.config.json';
     var projectCgfFile = path.join(Editor.projectPath, cfgName);
-    addZipFile(srcFolder, GAME_CONFIG_JSONS_NAME, projectCgfFile);
+    addZipFile(srcFolder, GAME_MANIFEST_DIR_NAME, GAME_CONFIG_JSONS_NAME, projectCgfFile);
 }
 
 function handleSign(zipObj) {
@@ -136,7 +137,7 @@ function handleSign(zipObj) {
 
 function handlePackage(zipObj) {
     var fullPath = getResPath("package.json");
-    addZipFile(zipObj, "package.json", fullPath);
+    addZipFile(zipObj, "", "package.json", fullPath);
 }
 
 function handleDirs(zipObj, dirList, destList, noZipFileList, complete) {

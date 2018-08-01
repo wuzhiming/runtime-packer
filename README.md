@@ -134,18 +134,19 @@ __*参数*__
 
 - zipObj: 可以传 jszip 对象，或者传 jszip.folder，若为后者，则在压缩包的相应目录添加文件。
 - dir: 要压缩的目录的绝对路径。
-- destDirPath: 根绝 zipObj 所处于的目录，拼接上该路径为最终文件存储的路径。
+- destDirPath: 根据 zipObj 所处于的目录，拼接上该路径为最终文件存储的路径。
 - noZipFileList: 不加入压缩文件的文件列表。
 - complete: 压缩结束后的回调函数。
 
 ### 将文件添加到压缩文件中
 ```JavaScript
-    void addZipFile(zipObj, filePath, fullPath);
+    void addZipFile(zipObj, destDirPath, filePath, fullPath);
 ```
 
 __*参数*__
 
 - zipObj: 可以传 jszip 对象，或者传 jszip.folder，若为后者，则在压缩包的相应目录添加文件。
+- destDirPath: 相对于压缩包的路径，在添加 webpack external 使用到。
 - filePath: 指定添加该文件到压缩文件中时的文件名称。
 - fullPath: 要添加的文件的绝对路径。
 
