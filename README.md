@@ -114,7 +114,7 @@ __*参数*__
 
 ### 遍历目录
 ```JavaScript
-    void walkDir(dir, fileCb, dirCb, complete);
+    void walkDir(dir, fileCb, dirCb, nexDir, complete);
 ```
 
 __*参数*__
@@ -122,6 +122,7 @@ __*参数*__
 - dir: 要遍历的文件夹的绝对路径。
 - fileCb: 读取到文件时的回调函数。
 - dirCb: 读取到目录时的回调函数。
+- nexDir: 读取完一层目录后的回调，传回下一层目录的相关参数。
 - complete: 遍历结束后的回调函数。
 
 ### 将目录中的文件添加到压缩文件中
