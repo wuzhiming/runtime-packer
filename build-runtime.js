@@ -4,35 +4,22 @@ var fs = require('fs');
 var JSZip = require('./lib/jszip.min.js');
 var jsZip = new JSZip();
 
-var rootPath;
+var zipRootPath;
 
-function walk(dir, noZipFileList, complete) {
+// 遍历 dir
+function walkDir(dir, fileCb, dirCb, complete) {
     var dirList = [dir];
-    var parentPathList = [rootPath];
-    var parentZip = [jsZip];
     do {
         var dirItem = dirList.pop();
-        var dirParentPath = parentPathList.pop();
-        var dirZip = parentZip.pop();
-        var folder = dirZip.folder(dirItem.slice(dirParentPath.length + 1, dirItem.length));
         var list = fs.readdirSync(dirItem);
         list.forEach(function (file) {
-            var shouldZip = true;
-            noZipFileList.forEach(function (noZipFile) {
-                if (file === noZipFile) {
-                    shouldZip = false;
-                }
-            });
-            if (shouldZip) {
-                file = path.join(dirItem, file);
-                var stat = fs.statSync(file);
-                if (stat && stat.isDirectory()) {
-                    dirList.push(file);
-                    parentPathList.push(dirItem);
-                    parentZip.push(folder);
-                } else {
-                    addZipFile(folder, file.slice(dirItem.length + 1, file.length), file);
-                }
+            var fileFullPath = path.join(dirItem, file);
+            var stat = fs.statSync(fileFullPath);
+            if (stat && stat.isDirectory()) {
+                dirList.push(fileFullPath);
+                dirCb(dirItem, file);
+            } else {
+                fileCb(dirItem, file);
             }
         });
         if (dirList.length <= 0) {
@@ -41,15 +28,36 @@ function walk(dir, noZipFileList, complete) {
     } while (dirList.length > 0);
 }
 
+function zipDir(zipObj, dir, destDirPath, noZipFileList, complete) {
+    walkDir(dir, function (parentDir, fileName) {
+        var shouldZip = true;
+        noZipFileList.forEach(function (noZipFile) {
+            if (fileName === noZipFile) {
+                shouldZip = false;
+            }
+        });
+        //获取父目录的相对路径
+        var relativeToZipParentDir = parentDir.slice(zipRootPath.length + 1, parentDir.length);
+        var finalDestDir = path.join(destDirPath, relativeToZipParentDir);
+        var folder = zipObj.folder(finalDestDir);
+        if (shouldZip) {
+            var fullPath = path.join(parentDir, fileName);
+            addZipFile(folder, fileName, fullPath);
+        }
+    }, function (parentDir, dirName) { }, function () {
+        complete();
+    });
+}
+
 var VIVOExternals = {};
 function addZipFile(zipObj, filePath, fullPath) {
-    var fileExt = path.extname(fullPath); 
+    var fileExt = path.extname(fullPath);
     if (fileExt === ".js") {
-        var relativeToZipPath = fullPath.slice(rootPath.length + 1, fullPath.length);
+        var relativeToZipPath = fullPath.slice(zipRootPath.length + 1, fullPath.length);
         // 去除 main.js 以及 jsb-adapter 下除了 index.js 的文件
-        if (relativeToZipPath !== "main.js" && 
-        (relativeToZipPath.indexOf("jsb-adapter") !== 0 || filePath === "index.js")) {
-            VIVOExternals[relativeToZipPath] = "commonjs " + relativeToZipPath;   
+        if (relativeToZipPath !== "main.js" &&
+            (relativeToZipPath.indexOf("jsb-adapter") !== 0 || filePath === "index.js")) {
+            VIVOExternals[relativeToZipPath] = "commonjs " + relativeToZipPath;
         }
     }
     zipObj.file(filePath, fs.readFileSync(fullPath));
@@ -93,7 +101,7 @@ function onBeforeBuildFinish(event, options) {
     }
 
     Editor.log('Building cpk ' + options.platform + ' to ' + options.dest);
-    rootPath = options.dest;
+    zipRootPath = options.dest;
 
     var mainName = 'main.js';
     var resName = 'res';
@@ -104,10 +112,6 @@ function onBeforeBuildFinish(event, options) {
     var dirRes = path.join(options.dest, resName);
     var dirSrc = path.join(options.dest, srcName);
     var dirAdapter = path.join(options.dest, jsbAdapterName);
-
-    // var polyFilePath = path.join(__dirname, 'jsb_polyfill.js');
-    // var srcPolyFilePath = path.join(dirSrc, 'jsb_polyfill.js');
-    // fs.writeFileSync(srcPolyFilePath, fs.readFileSync(polyFilePath));
 
     //判断 res 与 src 是否遍历完成
     var isResComplete;
@@ -136,21 +140,21 @@ function onBeforeBuildFinish(event, options) {
     //添加 game.config.json 文件
     addZipFile(jsZip, cfgName, projectCgfFile);
     //添加 res 目录中的文件
-    walk(dirRes, [], function () {
+    zipDir(jsZip, dirRes, "engine/res", [], function () {
         isResComplete = true;
         if (isSrcComplete && isAdapterComplete) {
             zip();
         }
     });
     //添加 src 目录中的文件
-    walk(dirSrc, [], function () {
+    zipDir(jsZip, dirSrc, "engine/src", [], function () {
         isSrcComplete = true;
         if (isResComplete && isAdapterComplete) {
             zip();
         }
     });
     //添加 jsb-adapter 目录中的文件
-    walk(dirAdapter, ["jsb-builtin.js"], function () {
+    zipDir(jsZip, dirAdapter, "engine/jsb-adapter", ["jsb-builtin.js"], function () {
         isAdapterComplete = true;
         if (isResComplete && isSrcComplete) {
             zip();
