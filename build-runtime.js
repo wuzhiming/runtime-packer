@@ -61,7 +61,7 @@ function zipDir(zipObj, dir, destDirPath, noZipFileList, complete) {
         });
         if (shouldZip) {
             var fullPath = path.join(parentDir, fileName);
-            addZipFile(folderCurrent, destDirPath, fileName, fullPath);
+            addZipFile(folderCurrent, fileName, fullPath);
         }
     }, function (parentDir, dirName) {
         folderParentList.push(folderCurrent);
@@ -73,15 +73,14 @@ function zipDir(zipObj, dir, destDirPath, noZipFileList, complete) {
 }
 
 var VIVOExternals = {};
-function addZipFile(zipObj, destDirPath, filePath, fullPath) {
+function addZipFile(zipObj, filePath, fullPath) {
     var shouldHandleRequire = false;
     var fileExt = path.extname(fullPath);
     if (fileExt === ".js") {
         var relativeToZipPath = fullPath.slice(zipRootPath.length + 1, fullPath.length);
-        relativeToZipPath = path.join(destDirPath, relativeToZipPath);
         // 去除 main.js 以及 jsb-adapter 下除了 index.js 的文件
-        if (relativeToZipPath !== path.join(GAME_MANIFEST_DIR_NAME, "main.js") &&
-            (relativeToZipPath.indexOf(path.join(JSB_ADAPTER_DIR_NAME, "jsb-adapter")) !== 0 || filePath === "index.js")) {
+        if (relativeToZipPath !== "main.js" &&
+            (relativeToZipPath.indexOf("jsb-adapter") !== 0 || filePath === "index.js")) {
             VIVOExternals[relativeToZipPath] = "commonjs " + relativeToZipPath;
             shouldHandleRequire = true;
         }
@@ -122,22 +121,27 @@ function handleSrc(zipObj) {
     //添加 main.js 文件
     var mainName = 'main.js';
     var fileMain = path.join(zipRootPath, mainName);
-    addZipFile(srcFolder, GAME_MANIFEST_DIR_NAME, MAIN_JS_NAME, fileMain);
+    addZipFile(srcFolder, MAIN_JS_NAME, fileMain);
     //添加 game.config.json 文件
     var cfgName = 'game.config.json';
     var projectCgfFile = path.join(Editor.projectPath, cfgName);
-    addZipFile(srcFolder, GAME_MANIFEST_DIR_NAME, GAME_CONFIG_JSONS_NAME, projectCgfFile);
+    addZipFile(srcFolder, GAME_CONFIG_JSONS_NAME, projectCgfFile);
 }
 
 function handleSign(zipObj) {
     var folder = zipObj.folder(SIGN_DIR_NAME);
     // 使用 folder 向 sign 中添加文件
     // addZipFile(folder...);
+    var folderDebug = folder.folder("debug");
+    var fullPath = getResPath("certificate.pem");
+    addZipFile(folderDebug, "certificate.pem", fullPath);
+    fullPath = getResPath("private.pem");
+    addZipFile(folderDebug, "private.pem", fullPath);
 }
 
 function handlePackage(zipObj) {
     var fullPath = getResPath("package.json");
-    addZipFile(zipObj, "", "package.json", fullPath);
+    addZipFile(zipObj, "package.json", fullPath);
 }
 
 function handleDirs(zipObj, dirList, destList, noZipFileList, complete) {
@@ -182,6 +186,7 @@ function onBeforeBuildFinish(event, options) {
     var dirRes = path.join(options.dest, resName);
     var dirSrc = path.join(options.dest, srcName);
     var dirAdapter = path.join(options.dest, jsbAdapterName);
+    var dirSign = path.join(options.dest, "sign");
 
     var jsZip = new JSZip();
 
@@ -192,10 +197,14 @@ function onBeforeBuildFinish(event, options) {
     // 处理 package.json
     handlePackage(jsZip);
     // 压缩 res src jsb-adapter 目录
+    var dirArray = [dirRes, dirSrc, dirAdapter];
+    if (fs.existsSync(dirSign)) {
+        dirArray.push(dirSign);
+    }
     handleDirs(jsZip,
-        [dirRes, dirSrc, dirAdapter],
-        [RES_DIR_NAME, SRC_DIR_NAME, JSB_ADAPTER_DIR_NAME],
-        [[], [], ["jsb-builtin.js"]],
+        dirArray,
+        [RES_DIR_NAME, SRC_DIR_NAME, JSB_ADAPTER_DIR_NAME, ""],
+        [[], [], ["jsb-builtin.js"], []],
         function () {
             // 生成压缩文件
             var targetName = options.title + '.cpk';
