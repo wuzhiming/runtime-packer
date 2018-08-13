@@ -13,6 +13,7 @@ var Hashes = require('./lib/hashes.min.js');
 
 let RUNTIME_CONFIG;
 var zipRootPath;
+var subpackages;
 
 // 获取资源文件
 function getResPath(name) {
@@ -71,17 +72,29 @@ function zipDir(zipObj, dir, destDirPath, noZipFileList, complete) {
     });
 }
 function addZipFile(zipObj, filePath, fullPath) {
-        zipObj.file(filePath, fs.readFileSync(fullPath));
+    if (subpackages.indexOf(fullPath) !== -1) {
+        return;
+    }
+    zipObj.file(filePath, fs.readFileSync(fullPath));
 }
 
-function mkSubpackageRes(assetsPath, targetPath, complete) {
+function initSubPackages(subpackagesObj) {
+    subpackages = [];
+    for (var Key in subpackagesObj) {
+        var fileName = subpackagesObj[Key].path;
+        var jsFile = path.join(zipRootPath, fileName);
+        subpackages.push(jsFile);
+    }
+}
+
+function mkSubpackageRes(targetPath, complete) {
     var subPackages = [];
     var taskCount = 0;
-    walkDir(assetsPath, function (parentPath, fileName) {
+    subpackages.forEach(fileName => {
         var fileExt = path.extname(fileName);
         var name = path.basename(fileName, fileExt);
 
-        var jsFile = path.join(parentPath, fileName);
+        var jsFile = fileName;
         var destDirPath = path.join(targetPath, name);
         if (!fs.existsSync(destDirPath)) {
             fs.mkdirSync(destDirPath);
@@ -93,6 +106,7 @@ function mkSubpackageRes(assetsPath, targetPath, complete) {
         taskCount += 1;
         readStream.pipe(writeStream);
         writeStream.on('finish', function () {
+            Editor.log(taskCount);
             taskCount -= 1;
             if (taskCount <= 0) {
                 complete(subPackages);
@@ -107,7 +121,7 @@ function mkSubpackageRes(assetsPath, targetPath, complete) {
         });
 
         subPackages.push(name);
-    }, function () { }, function () { }, function() {});
+    });
 }
 
 function zipSubpackage(subpackageDirs, targetPath, title, complete) {
@@ -199,6 +213,11 @@ function onBeforeBuildFinish(event, options) {
     var dirAdapter = path.join(options.dest, jsbAdapterName);
     var dirSubpackage = path.join(dirSrc, "assets");
 
+    var settingPath = path.join(dirSrc, "settings.js");
+    global.window = {};
+    require(settingPath);
+    initSubPackages(window._CCSettings.subpackages);
+
     var jsZip = new JSZip();
 
     //生成分包
@@ -214,7 +233,7 @@ function onBeforeBuildFinish(event, options) {
             fs.mkdirSync(dirTargetSubpackage);
         }
         // 生成分包目录
-        mkSubpackageRes(dirSubpackage, dirTargetSubpackage, function (subpackages) {
+        mkSubpackageRes(dirTargetSubpackage, function (subpackages) {
             // 生成分包 cpk
             zipSubpackage(subpackages, dirTargetSubpackage, options.title, function (subpackageArr) {
                 // 读取 config 文件
@@ -249,7 +268,7 @@ function onBeforeBuildFinish(event, options) {
 }
 
 //先读取runtime相应的配置信息
-function loadRuntimeSettings(event,options) {
+function loadRuntimeSettings(event, options) {
     var value = Editor.Profile.load('profile://project/cpk-publish.json');
     RUNTIME_CONFIG = value.data;
     var deviceOrientation = RUNTIME_CONFIG.deviceOrientation;
@@ -259,7 +278,7 @@ function loadRuntimeSettings(event,options) {
         event.reply(new Error("Config error!"));
         return;
     }
-    onBeforeBuildFinish(event,options);
+    onBeforeBuildFinish(event, options);
 }
 
 module.exports = {
