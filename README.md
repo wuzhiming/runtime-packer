@@ -13,12 +13,6 @@
 
 ## 配置属性
 
-### WEBPACK_DIR_NAME
-用于设置 webpack.config.js 打包到压缩包中相对于压缩包的路径。
-
-### WEBPACK_NAME
-用于设置 webpack.config.js 打包时的文件名。
-
 ### SRC_DIR_NAME
 用于设置 creator 打包出来的 src 目录在压缩包中的路径。
 
@@ -27,9 +21,6 @@
 
 ### JSB_ADAPTER_DIR_NAME
 用于设置 creator 打包出来的 jsb-adapter 目录在压缩包中的路径。
-
-### SIGN_DIR_NAME
-用于设置 sign 目录在压缩包中的路径。
 
 ### GAME_MANIFEST_DIR_NAME
 用于设置 main.js 以及 game.config.json 文件在压缩包中的存放目录。
@@ -63,36 +54,12 @@ __*说明*__
 
 __*参数*__
 
-- deviceOrientation: 屏幕的旋转。
-- showStatusBar: 是否显示状态栏。
-- runtimeVersion: runtime 版本。
+- subpackageArr: 子包数组。
 - path: 要写入的绝对路径。
 
 ### 处理 main.js 以及 game.config.json 文件
 ```JavaScript
     void handleSrc(zipObj);
-```
-
-__*参数*__
-
-- zipObj: 可以传 jszip 对象，或者传 jszip.folder，若为后者，则在压缩包的相应目录添加文件。
-
-### 处理 handleSign 文件
-```JavaScript
-    void handleSign(zipObj);
-```
-
-__*参数*__
-
-- zipObj: 可以传 jszip 对象，或者传 jszip.folder，若为后者，则在压缩包的相应目录添加文件。
-
-__*说明*__
-
-- 当前不知道需要在这个目录中处理什么，只创建了该目录。
-
-### 处理 package.json 文件
-```JavaScript
-    void handlePackage(zipObj);
 ```
 
 __*参数*__
@@ -154,15 +121,6 @@ __*说明*__
 
 若要处理 require 的相关问题，可以在该函数中处理。
 
-### 将 webpack.config.js 文件添加到压缩包中
-```JavaScript
-    void zipVIVOExternals(zipObj);
-```
-
-__*参数*__
-
-- zipObj: 可以传 jszip 对象，或者传 jszip.folder，若为后者，则在压缩包的相应目录添加文件。
-
 ### 拼接 res 目录中文件的文件名
 ```JavaScript
     void getResPath(name);
@@ -175,6 +133,29 @@ __*参数*__
 __*返回值*__
 
 - 返回要获取的 res 目录中文件的绝对路径。
+
+### 在构建目录中创建子包资源目录
+```JavaScript
+    void mkSubpackageRes(assetsPath, targetPath, complete);
+```
+
+__*参数*__
+
+- assetsPath: creator 生成的分包的目录。
+- targetPath: 生成分包的目标目录。
+- complete: 完成的回调函数。
+
+### 将分包目录生成为 cpk
+```JavaScript
+    void zipSubpackage(subpackageDirs, targetPath, title, complete);
+```
+
+__*参数*__
+
+- subPakcageDir: 子包目录数组。
+- targetPath: 生成目标目录。
+- title: cpk 名。
+- complete: 完成回调。
 
 ## 如何将模版文件添加到 cpk 包中
 1. 在打包脚本 res 目录中添加模版文件。
