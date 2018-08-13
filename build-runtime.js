@@ -107,7 +107,7 @@ function mkSubpackageRes(assetsPath, targetPath, complete) {
         });
 
         subPackages.push(name);
-    }, function () { }, function () { });
+    }, function () { }, function () { }, function() {});
 }
 
 function zipSubpackage(subpackageDirs, targetPath, title, complete) {
@@ -116,7 +116,7 @@ function zipSubpackage(subpackageDirs, targetPath, title, complete) {
     subpackageDirs.forEach(function (file) {
         var jsZip = new JSZip();
         var zipRes = path.join(targetPath, file);
-        zipDir(zipRes, targetPath, jsZip, [], function () {
+        zipDir(jsZip, zipRes, "", [], function () {
             var crc32 = Hashes.CRC32(file + "/");
             var zipTarget = path.join(targetPath, title + crc32 + ".cpk");
             jsZip.generateNodeStream({ type: "nodebuffer", base64: false, compression: 'DEFLATE' })
@@ -197,16 +197,9 @@ function onBeforeBuildFinish(event, options) {
     var dirRes = path.join(options.dest, resName);
     var dirSrc = path.join(options.dest, srcName);
     var dirAdapter = path.join(options.dest, jsbAdapterName);
+    var dirSubpackage = path.join(dirSrc, "assets");
 
     var jsZip = new JSZip();
-
-    // 处理 src 目录
-    handleSrc(jsZip);
-    // 压缩 res src jsb-adapter 目录
-    var dirArray = [dirRes, dirSrc, dirAdapter];
-    if (fs.existsSync(dirSign)) {
-        dirArray.push(dirSign);
-    }
 
     //生成分包
     var dirTargetSubpackage = path.join(options.dest, "subpackages");
@@ -230,6 +223,11 @@ function onBeforeBuildFinish(event, options) {
             });
         });
     }
+
+    // 处理 src 目录
+    handleSrc(jsZip);
+    // 压缩 res src jsb-adapter 目录
+    var dirArray = [dirRes, dirSrc, dirAdapter];
 
     handleDirs(jsZip,
         dirArray,
