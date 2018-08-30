@@ -48,7 +48,9 @@ exports.watch = {
 
 exports.created = function () {
     this.originEncryptJs = this.project.encryptJs;
+    this.originMd5Cache = this.project.md5Cache;
     this.project.encryptJs = false;
+    this.project.md5Cache = false;
     Editor.Profile.load('profile://project/cpk-publish.json', (err, ret) => {
         if (err) return;
         this.profile = ret;
@@ -59,6 +61,7 @@ exports.created = function () {
 exports.directives = {};
 exports.destroyed = function () {
     this.project.encryptJs = this.originEncryptJs;
+    this.project.md5Cache = this.originMd5Cache;
 };
 
 exports.methods = {};
