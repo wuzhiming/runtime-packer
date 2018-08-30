@@ -262,8 +262,8 @@ module.exports = {
         { label: Editor.T('BUILDER.play'), message: 'play' },
     ],
     messages: {
-        'build-finished': loadRuntimeSettings,
-        'play'(event, options) {
+        'build-finished': onBeforeBuildFinish,
+        'play' (event, options) {
             Editor.Ipc.sendToMain('oppo-runtime-devtools:open', options);
         },
     },
