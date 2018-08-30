@@ -1,3 +1,10 @@
+var SRC_DIR_NAME = "";
+var RES_DIR_NAME = "";
+var JSB_ADAPTER_DIR_NAME = "";
+var GAME_MANIFEST_DIR_NAME = "";
+var MAIN_JS_NAME = "main.js";
+var GAME_CONFIG_JSONS_NAME = "game.config.json";
+
 // main.js
 var path = require('path');
 var fs = require('fs');
@@ -5,17 +12,30 @@ var JSZip = require('./lib/jszip.min.js');
 var Hashes = require('./lib/hashes.min.js');
 
 let RUNTIME_CONFIG;
+var zipRootPath;
+var subpackages;
 
-function walkDir(dir, fileCb, dirCb, complete) {
+// 获取资源文件
+function getResPath(name) {
+    var resPath = path.join(__dirname, "res");
+    return path.join(resPath, name);
+}
+
+// 遍历 dir
+function walkDir(dir, fileCb, dirCb, nexDir, complete) {
     var dirList = [dir];
+    var dirParentList = [path.dirname(dir)];
     do {
         var dirItem = dirList.pop();
+        var dirParent = dirParentList.pop();
+        nexDir(dirParent, dirItem);
         var list = fs.readdirSync(dirItem);
         list.forEach(function (file) {
             var fileFullPath = path.join(dirItem, file);
             var stat = fs.statSync(fileFullPath);
             if (stat && stat.isDirectory()) {
                 dirList.push(fileFullPath);
+                dirParentList.push(dirItem);
                 dirCb(dirItem, file);
             } else {
                 fileCb(dirItem, file);
@@ -27,49 +47,54 @@ function walkDir(dir, fileCb, dirCb, complete) {
     } while (dirList.length > 0);
 }
 
-function zipDir(dir, rootPath, zip, noZipFileList, complete) {
-    var dirList = [dir];
-    var parentPathList = [rootPath];
-    var parentZip = [zip];
-    do {
-        var dirItem = dirList.pop();
-        var dirParentPath = parentPathList.pop();
-        var dirZip = parentZip.pop();
-        var folder = dirZip.folder(dirItem.slice(dirParentPath.length + 1, dirItem.length));
-        var list = fs.readdirSync(dirItem);
-        list.forEach(function (file) {
-            var shouldZip = true;
-            noZipFileList.forEach(function (noZipFile) {
-                if (file === noZipFile) {
-                    shouldZip = false;
-                }
-            });
-            if (shouldZip) {
-                file = path.join(dirItem, file);
-                var stat = fs.statSync(file);
-                if (stat && stat.isDirectory()) {
-                    dirList.push(file);
-                    parentPathList.push(dirItem);
-                    parentZip.push(folder);
-                } else {
-                    folder.file(file.slice(dirItem.length + 1, file.length), fs.readFileSync(file));
-                }
+function zipDir(zipObj, dir, destDirPath, noZipFileList, complete) {
+    zipObj = zipObj.folder(destDirPath);
+    var folderParentList = [zipObj];
+    var folderCurrent;
+
+    walkDir(dir, function (parentDir, fileName) {
+        var shouldZip = true;
+        noZipFileList.forEach(function (noZipFile) {
+            if (fileName === noZipFile) {
+                shouldZip = false;
             }
         });
-        if (dirList.length <= 0) {
-            complete();
+        if (shouldZip) {
+            var fullPath = path.join(parentDir, fileName);
+            addZipFile(folderCurrent, fileName, fullPath);
         }
-    } while (dirList.length > 0);
+    }, function (parentDir, dirName) {
+        folderParentList.push(folderCurrent);
+    }, function (parentDir, currentDir) {
+        folderCurrent = folderParentList.pop().folder(currentDir.slice(parentDir.length + 1, currentDir.length));
+    }, function () {
+        complete();
+    });
+}
+function addZipFile(zipObj, filePath, fullPath) {
+    if (subpackages.indexOf(fullPath) !== -1) {
+        return;
+    }
+    zipObj.file(filePath, fs.readFileSync(fullPath));
 }
 
-function mkSubpackageRes(assetsPath, targetPath, complete) {
+function initSubPackages(subpackagesObj) {
+    subpackages = [];
+    for (var Key in subpackagesObj) {
+        var fileName = subpackagesObj[Key].path;
+        var jsFile = path.join(zipRootPath, fileName);
+        subpackages.push(jsFile);
+    }
+}
+
+function mkSubpackageRes(targetPath, complete) {
     var subPackages = [];
     var taskCount = 0;
-    walkDir(assetsPath, function (parentPath, fileName) {
+    subpackages.forEach(fileName => {
         var fileExt = path.extname(fileName);
         var name = path.basename(fileName, fileExt);
 
-        var jsFile = path.join(parentPath, fileName);
+        var jsFile = fileName;
         var destDirPath = path.join(targetPath, name);
         if (!fs.existsSync(destDirPath)) {
             fs.mkdirSync(destDirPath);
@@ -81,6 +106,7 @@ function mkSubpackageRes(assetsPath, targetPath, complete) {
         taskCount += 1;
         readStream.pipe(writeStream);
         writeStream.on('finish', function () {
+            Editor.log(taskCount);
             taskCount -= 1;
             if (taskCount <= 0) {
                 complete(subPackages);
@@ -95,7 +121,7 @@ function mkSubpackageRes(assetsPath, targetPath, complete) {
         });
 
         subPackages.push(name);
-    }, function () { }, function () { });
+    });
 }
 
 function zipSubpackage(subpackageDirs, targetPath, title, complete) {
@@ -104,7 +130,7 @@ function zipSubpackage(subpackageDirs, targetPath, title, complete) {
     subpackageDirs.forEach(function (file) {
         var jsZip = new JSZip();
         var zipRes = path.join(targetPath, file);
-        zipDir(zipRes, targetPath, jsZip, [], function () {
+        zipDir(jsZip, zipRes, "", [], function () {
             var crc32 = Hashes.CRC32(file + "/");
             var zipTarget = path.join(targetPath, title + crc32 + ".cpk");
             jsZip.generateNodeStream({ type: "nodebuffer", base64: false, compression: 'DEFLATE' })
@@ -125,7 +151,10 @@ function zipSubpackage(subpackageDirs, targetPath, title, complete) {
     });
 }
 
-function writeConfigFile(deviceOrientation, showStatusBar, runtimeVersion, subpackageArr, path) {
+function writeConfigFile(subpackageArr, path) {
+    var deviceOrientation = RUNTIME_CONFIG.deviceOrientation;
+    var runtimeVersion = RUNTIME_CONFIG.runtimeVersion;
+    var showStatusBar = RUNTIME_CONFIG.showStatusBar;
     var jsonObj = {
         "deviceOrientation": deviceOrientation,
         "showStatusBar": showStatusBar,
@@ -136,39 +165,60 @@ function writeConfigFile(deviceOrientation, showStatusBar, runtimeVersion, subpa
     fs.writeFileSync(path, jsonStr);
 }
 
+function handleSrc(zipObj) {
+    var srcFolder = zipObj.folder(GAME_MANIFEST_DIR_NAME);
+    //添加 main.js 文件
+    var mainName = 'main.js';
+    var fileMain = path.join(zipRootPath, mainName);
+    addZipFile(srcFolder, MAIN_JS_NAME, fileMain);
+    //添加 game.config.json 文件
+    var cfgName = 'game.config.json';
+    var projectCgfFile = path.join(Editor.projectPath, cfgName);
+    addZipFile(srcFolder, GAME_CONFIG_JSONS_NAME, projectCgfFile);
+}
+
+function handleDirs(zipObj, dirList, destList, noZipFileList, complete) {
+    var completeCount = 0;
+    for (let index = 0; index < dirList.length; index++) {
+        const fullDir = dirList[index];
+        const destDir = destList[index];
+        const noZipFiles = noZipFileList[index];
+        zipDir(zipObj, fullDir, destDir, noZipFiles, function () {
+            completeCount++;
+            if (completeCount === dirList.length) {
+                complete();
+            }
+        });
+    }
+}
+
 function onBeforeBuildFinish(event, options) {
     Editor.log('Checking config file ' + options.dest);
+    // addZipFile 方法中获取文件相对于压缩包的路径
     var cfgName = 'game.config.json';
     var projectCgfFile = path.join(Editor.projectPath, cfgName);
     if (!fs.existsSync(projectCgfFile)) {
-        var message = 'Can not find config file in ' + '\"' + Editor.projectPath + '\"';
-        message = message + "\n\n" + 'We have generated a config file for you in ' + '\"' + Editor.projectPath + '/' + cfgName + '\"';
-        message = message + "\n\n" + 'Please modify the file and build again';
-        message = message + "\n\n" + 'Building cpk fail';
-        Editor.Panel.open('cpk-publish', message);
-        writeConfigFile("portrait", false, "1.0.0", [], projectCgfFile);
-        Editor.failed('Building cpk fail');
-        event.reply();
-        return;
+        writeConfigFile([], projectCgfFile);
     }
 
     Editor.log('Building cpk ' + options.platform + ' to ' + options.dest);
+    zipRootPath = options.dest;
 
-    var mainName = 'main.js';
     var resName = 'res';
     var srcName = 'src';
     var jsbAdapterName = 'jsb-adapter';
 
-    var fileMain = path.join(options.dest, mainName);
     var dirRes = path.join(options.dest, resName);
     var dirSrc = path.join(options.dest, srcName);
     var dirAdapter = path.join(options.dest, jsbAdapterName);
     var dirSubpackage = path.join(dirSrc, "assets");
 
-    //判断 res 与 src 是否遍历完成
-    var isResComplete;
-    var isSrcComplete;
-    var isAdapterComplete;
+    var settingPath = path.join(dirSrc, "settings.js");
+    global.window = {};
+    require(settingPath);
+    initSubPackages(window._CCSettings.subpackages);
+
+    var jsZip = new JSZip();
 
     //生成分包
     var dirTargetSubpackage = path.join(options.dest, "subpackages");
@@ -183,74 +233,52 @@ function onBeforeBuildFinish(event, options) {
             fs.mkdirSync(dirTargetSubpackage);
         }
         // 生成分包目录
-        mkSubpackageRes(dirSubpackage, dirTargetSubpackage, function (subpackages) {
+        mkSubpackageRes(dirTargetSubpackage, function (subpackages) {
             // 生成分包 cpk
             zipSubpackage(subpackages, dirTargetSubpackage, options.title, function (subpackageArr) {
                 // 读取 config 文件
-                var configStr = fs.readFileSync(projectCgfFile);
-                var configJSON = JSON.parse(configStr);
-                writeConfigFile(configJSON.deviceOrientation,
-                    configJSON.showStatusBar,
-                    configJSON.runtimeVersion,
-                    subpackageArr,
-                    projectCgfFile);
+                writeConfigFile(subpackageArr, projectCgfFile);
                 event.reply();
             });
         });
     }
 
-    //生成压缩文件
-    var jsZip = new JSZip();
-    var zip = function () {
-        var targetName = options.title + '.cpk';
-        var dirTarget = path.join(options.dest, targetName);
+    // 处理 src 目录
+    handleSrc(jsZip);
+    // 压缩 res src jsb-adapter 目录
+    var dirArray = [dirRes, dirSrc, dirAdapter];
 
-        jsZip.generateNodeStream({ type: "nodebuffer", base64: false, compression: 'DEFLATE' })
-            .pipe(fs.createWriteStream(dirTarget))
-            .on('finish', function () {
-                let outTips = Editor.T('EXPORT_ASSET.export_tips', { outPath: dirTarget });
-                Editor.log(outTips);
-                generateSubpackage();
-            });
-    };
+    handleDirs(jsZip,
+        dirArray,
+        [RES_DIR_NAME, SRC_DIR_NAME, JSB_ADAPTER_DIR_NAME, ""],
+        [[], [], ["jsb-builtin.js"], []],
+        function () {
+            // 生成压缩文件
+            var targetName = options.title + '.cpk';
+            var dirTarget = path.join(options.dest, targetName);
 
-    //添加 main.js 文件
-    jsZip.file(mainName, fs.readFileSync(fileMain));
-    //添加 game.config.json 文件
-    jsZip.file(cfgName, fs.readFileSync(projectCgfFile));
-    //添加 res 目录中的文件
-    zipDir(dirRes, options.dest, jsZip, [], function () {
-        isResComplete = true;
-        if (isSrcComplete && isAdapterComplete) {
-            zip();
-        }
-    });
-    //添加 src 目录中的文件
-    zipDir(dirSrc, options.dest, jsZip, ["assets"], function () {
-        isSrcComplete = true;
-        if (isResComplete && isAdapterComplete) {
-            zip();
-        }
-    });
-    //添加 jsb-adapter 目录中的文件
-    zipDir(dirAdapter, options.dest, jsZip, ["jsb-builtin.js"], function () {
-        isAdapterComplete = true;
-        if (isResComplete && isSrcComplete) {
-            zip();
-        }
-    });
+            jsZip.generateNodeStream({ type: "nodebuffer", base64: false, compression: 'DEFLATE' })
+                .pipe(fs.createWriteStream(dirTarget))
+                .on('finish', function () {
+                    let outTips = Editor.T('EXPORT_ASSET.export_tips', { outPath: dirTarget });
+                    Editor.log(outTips);
+                    generateSubpackage();
+                });
+        });
 }
 
 //先读取runtime相应的配置信息
-function loadRuntimeSettings(event,options) {
-    Editor.Profile.load('profile://project/cpk-publish.json', (err, ret) => {
-        if (err) {
-            //错误操作
-            return;
-        }
-        RUNTIME_CONFIG = ret.data;
-        onBeforeBuildFinish(event,options);
-    });
+function loadRuntimeSettings(event, options) {
+    var value = Editor.Profile.load('profile://project/cpk-publish.json');
+    RUNTIME_CONFIG = value.data;
+    var deviceOrientation = RUNTIME_CONFIG.deviceOrientation;
+    var runtimeVersion = RUNTIME_CONFIG.runtimeVersion;
+    var showStatusBar = RUNTIME_CONFIG.showStatusBar;
+    if (deviceOrientation === undefined || runtimeVersion === undefined || showStatusBar === undefined) {
+        event.reply(new Error("Config error!"));
+        return;
+    }
+    onBeforeBuildFinish(event, options);
 }
 
 module.exports = {
